@@ -24,11 +24,25 @@ if question:
     # Search for similar documents
     docs = vectordb.similarity_search(question, k=3)
     
-    # Create QA chain
-    qa_chain = load_qa_chain(llm, chain_type="stuff")
-    
-    # Get answer
-    answer = qa_chain.run(input_documents=docs, question=question)
-    
-    st.write("### Answer:")
-    st.write(answer)
+    if not docs:
+        st.write("### Answer:")
+        st.write("Not mentioned in the case.")
+    else:
+        # Show debug information (to check retrieved documents)
+        with st.expander("Retrieved context (debug):"):
+            for i, doc in enumerate(docs, start=1):
+                st.write(f"Document {i}:")
+                st.write(doc.page_content)
+
+        # Create QA chain
+        qa_chain = load_qa_chain(llm, chain_type="stuff")
+
+        # Get answer
+        answer = qa_chain.run(input_documents=docs, question=f"Answer strictly based on the case. If the information is not in the case, say 'Not mentioned in the case'. Question: {question}")
+
+        # Check if the answer is empty or irrelevant
+        if not answer.strip():
+            answer = "Not mentioned in the case."
+
+        st.write("### Answer:")
+        st.write(answer)
