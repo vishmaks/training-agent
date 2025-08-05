@@ -1,5 +1,9 @@
 streamlit
 langchain
+langchain-openai
 openai
 faiss-cpu
 tiktoken
+pandas
+pypdf
+python-dotenv
