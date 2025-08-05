@@ -1,48 +1,45 @@
 import streamlit as st
 from langchain_community.vectorstores import FAISS
-from langchain_openai import OpenAIEmbeddings, OpenAI
-from langchain.chains.question_answering import load_qa_chain
+from langchain_openai import OpenAIEmbeddings, ChatOpenAI
+from langchain.chains import RetrievalQA
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_community.document_loaders import PyPDFLoader
+import os
 
-# Cache the vector database loading
+# Set page config
+st.set_page_config(page_title="Case Assistant", layout="wide")
+
+# Load FAISS index
 @st.cache_resource
 def load_vector_db():
-    embeddings = OpenAIEmbeddings()
+    embeddings = OpenAIEmbeddings(openai_api_key=os.getenv("OPENAI_API_KEY"))
     return FAISS.load_local("faiss_index", embeddings, allow_dangerous_deserialization=True)
 
-# Load vector database
+st.title("📄 Case Assistant")
+st.write("Ask questions based on the uploaded case file. If the answer is not found, the assistant will say: 'This is not mentioned in the case.'")
+
+# Load vector DB
 vectordb = load_vector_db()
 
-# Initialize the LLM
-llm = OpenAI(temperature=0)
+# Create retriever
+retriever = vectordb.as_retriever(search_type="similarity", search_kwargs={"k": 3})
 
-# UI
-st.title("Case-based Q&A Agent")
+# Initialize QA chain
+llm = ChatOpenAI(temperature=0, openai_api_key=os.getenv("OPENAI_API_KEY"))
+qa_chain = RetrievalQA.from_chain_type(
+    llm=llm,
+    retriever=retriever,
+    return_source_documents=True
+)
 
-question = st.text_input("Enter your question based on the case:")
+# User input
+question = st.text_input("Enter your question in English:")
 
-if question:
-    # Search for similar documents
-    docs = vectordb.similarity_search(question, k=3)
-    
-    if not docs:
-        st.write("### Answer:")
-        st.write("Not mentioned in the case.")
-    else:
-        # Show debug information (to check retrieved documents)
-        with st.expander("Retrieved context (debug):"):
-            for i, doc in enumerate(docs, start=1):
-                st.write(f"Document {i}:")
-                st.write(doc.page_content)
-
-        # Create QA chain
-        qa_chain = load_qa_chain(llm, chain_type="stuff")
-
-        # Get answer
-        answer = qa_chain.run(input_documents=docs, question=f"Answer strictly based on the case. If the information is not in the case, say 'Not mentioned in the case'. Question: {question}")
-
-        # Check if the answer is empty or irrelevant
-        if not answer.strip():
-            answer = "Not mentioned in the case."
-
+if st.button("Get Answer"):
+    if question:
+        result = qa_chain.invoke({"query": f"Answer strictly based on the case file. If the information is missing, respond with: 'This is not mentioned in the case.' Question: {question}"})
+        answer = result.get("result", "No answer found.")
         st.write("### Answer:")
         st.write(answer)
+    else:
+        st.warning("Please enter a question.")
